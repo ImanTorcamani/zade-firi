@@ -138,9 +138,10 @@
     animate();
 
     function init() {
-      renderer = new THREE.WebGLRenderer({ antialias: true, canvas: document.getElementById('canvas') });
+      renderer = new THREE.WebGLRenderer({ antialias: false, canvas: document.getElementById('canvas') });
       renderer.setSize(window.innerWidth, window.innerHeight);
       renderer.setClearColor(0xaaaaaa);
+      renderer.setPixelRatio(window.devicePixelRatio * 0.5); // Reduce resolution
       renderer.shadowMap.enabled = false; // Disable shadows
 
       cssRenderer = new CSS3DRenderer();
@@ -156,37 +157,13 @@
       camera.position.set(0, 1.6, 3);
       camera.rotation.set(0, 0, 0);
 
-      // Lighting setup
-      const ambientLight = new THREE.AmbientLight(0xffffff, 0.3);
+      // Simplified lighting setup
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
       scene.add(ambientLight);
 
-      const dirLight = new THREE.DirectionalLight(0xffffff, 0.3);
+      const dirLight = new THREE.DirectionalLight(0xffffff, 0.5);
       dirLight.position.set(5, 10, 7.5);
       scene.add(dirLight);
-
-      const pointLight1 = new THREE.PointLight(0xffffff, 0.3, 50);
-      pointLight1.position.set(2, 5, 2);
-      scene.add(pointLight1);
-
-      // Removed unnecessary light sources
-      // const pointLight2 = new THREE.PointLight(0xffffff, 0.3, 50);
-      // pointLight2.position.set(-2, 5, -2);
-      // scene.add(pointLight2);
-
-      // const pointLight3 = new THREE.PointLight(0xffffff, 0.3, 50);
-      // pointLight3.position.set(0, 5, -5);
-      // scene.add(pointLight3);
-
-      const roofLight = new THREE.SpotLight(0xffffff, 0.5, 30, Math.PI / 4, 0.5);
-      roofLight.position.set(0, 10, 0);
-      roofLight.target.position.set(0, 1, 0);
-      roofLight.target.updateMatrixWorld();
-      scene.add(roofLight);
-      scene.add(roofLight.target);
-
-      const yellowLight = new THREE.PointLight(0xffff00, 0.2, 50);
-      yellowLight.position.set(0, 5, 0);
-      scene.add(yellowLight);
 
       // DRACO loader
       const dracoLoader = new DRACOLoader();
