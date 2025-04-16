@@ -17,7 +17,6 @@
       justify-content: center;
       align-items: center;
       background-color: #f0f0f0;
-      
     }
 
     #scene-container {
@@ -94,7 +93,7 @@
 
 <body>
   <div id="scene-container">
-    <canvas id="canvas"></canvas> 
+    <canvas id="canvas"></canvas>
 
     <div id="joystick-container">
       <div id="joystick-base">
@@ -142,6 +141,7 @@
       renderer = new THREE.WebGLRenderer({ antialias: true, canvas: document.getElementById('canvas') });
       renderer.setSize(window.innerWidth, window.innerHeight);
       renderer.setClearColor(0xaaaaaa);
+      renderer.shadowMap.enabled = false; // Disable shadows
 
       cssRenderer = new CSS3DRenderer();
       cssRenderer.setSize(window.innerWidth, window.innerHeight);
@@ -168,13 +168,14 @@
       pointLight1.position.set(2, 5, 2);
       scene.add(pointLight1);
 
-      const pointLight2 = new THREE.PointLight(0xffffff, 0.3, 50);
-      pointLight2.position.set(-2, 5, -2);
-      scene.add(pointLight2);
+      // Removed unnecessary light sources
+      // const pointLight2 = new THREE.PointLight(0xffffff, 0.3, 50);
+      // pointLight2.position.set(-2, 5, -2);
+      // scene.add(pointLight2);
 
-      const pointLight3 = new THREE.PointLight(0xffffff, 0.3, 50);
-      pointLight3.position.set(0, 5, -5);
-      scene.add(pointLight3);
+      // const pointLight3 = new THREE.PointLight(0xffffff, 0.3, 50);
+      // pointLight3.position.set(0, 5, -5);
+      // scene.add(pointLight3);
 
       const roofLight = new THREE.SpotLight(0xffffff, 0.5, 30, Math.PI / 4, 0.5);
       roofLight.position.set(0, 10, 0);
@@ -420,7 +421,7 @@
         // Right/left movement (x-axis)
         direction.x += (joystickPosition.x / joystickMaxDistance) * moveSpeed * 2;
         // Forward/backward movement (z-axis)
-        direction.z -= (joystickPosition.y / joystickMaxDistance) * moveSpeed * 2;
+        direction.z += (joystickPosition.y / joystickMaxDistance) * moveSpeed * 2; // Swapped direction
       }
 
       const cameraDirection = new THREE.Vector3();
