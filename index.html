@@ -1,11 +1,14 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <link rel="icon" type="image/x-icon" href="/img/ico.jpg">
   <title>3D Model Walkthrough</title>
+  
+  <!-- NippleJS for mobile joystick -->
+  <script src="https://cdn.jsdelivr.net/npm/nipplejs@0.9.0/dist/nipplejs.min.js"></script>
+  
   <style>
     html, body {
       margin: 0;
@@ -29,6 +32,15 @@
       width: 100%;
       height: 100%;
     }
+
+    #joystick-container {
+      position: absolute;
+      bottom: 10%;
+      left: 10%;
+      width: 120px;
+      height: 120px;
+      z-index: 10;
+    }
   </style>
 
   <script type="importmap">
@@ -45,6 +57,7 @@
 <body>
   <div id="scene-container">
     <canvas id="canvas"></canvas>
+    <div id="joystick-container"></div>
   </div>
 
   <script type="module">
@@ -64,6 +77,8 @@
     let currentHistoryIndex = -1;
     const MAX_HISTORY = 20;
 
+    let joystickVector = { x: 0, y: 0 };
+
     function debounce(func, wait) {
       let timeout;
       return function (...args) {
@@ -72,11 +87,12 @@
       };
     }
 
-    function isIOS() {
-      return /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+    init();
+    if (/Mobi|Android|iPhone|iPad/i.test(navigator.userAgent)) {
+      addJoystickControls();
+      addTouchControls();
     }
 
-    init();
     animate();
 
     function init() {
@@ -230,13 +246,59 @@
 
       camera.rotation.y -= deltaX * 0.005;
       camera.rotation.x -= deltaY * 0.005;
-
       camera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, camera.rotation.x));
 
       previousMousePosition = {
         x: event.clientX,
         y: event.clientY
       };
+    }
+
+    function addJoystickControls() {
+      const joystickManager = nipplejs.create({
+        zone: document.getElementById('joystick-container'),
+        mode: 'static',
+        position: { left: '60px', bottom: '60px' },
+        color: 'blue',
+        size: 100
+      });
+
+      joystickManager.on('move', (evt, data) => {
+        if (data && data.vector) {
+          joystickVector = data.vector;
+        }
+      });
+
+      joystickManager.on('end', () => {
+        joystickVector = { x: 0, y: 0 };
+      });
+    }
+
+    function addTouchControls() {
+      document.addEventListener('touchstart', (e) => {
+        isDragging = true;
+        previousMousePosition.x = e.touches[0].clientX;
+        previousMousePosition.y = e.touches[0].clientY;
+      }, false);
+
+      document.addEventListener('touchend', () => {
+        isDragging = false;
+        saveCameraState();
+      }, false);
+
+      document.addEventListener('touchmove', (e) => {
+        if (!isDragging) return;
+        const touch = e.touches[0];
+        const deltaX = touch.clientX - previousMousePosition.x;
+        const deltaY = touch.clientY - previousMousePosition.y;
+
+        camera.rotation.y -= deltaX * 0.005;
+        camera.rotation.x -= deltaY * 0.005;
+        camera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, camera.rotation.x));
+
+        previousMousePosition.x = touch.clientX;
+        previousMousePosition.y = touch.clientY;
+      }, false);
     }
 
     function animate() {
@@ -249,13 +311,18 @@
       if (keysPressed['a'] || keysPressed['arrowleft']) direction.x -= moveSpeed;
       if (keysPressed['d'] || keysPressed['arrowright']) direction.x += moveSpeed;
 
-      const cameraDirection = new THREE.Vector3();
-      camera.getWorldDirection(cameraDirection);
+      direction.x += joystickVector.x * moveSpeed;
+      direction.z += joystickVector.y * moveSpeed;
+
+      const camDir = new THREE.Vector3();
+      camera.getWorldDirection(camDir);
+      camDir.y = 0;
+      camDir.normalize();
 
       const right = new THREE.Vector3();
-      right.crossVectors(cameraDirection, new THREE.Vector3(0, 1, 0));
+      right.crossVectors(camDir, new THREE.Vector3(0, 1, 0)).normalize();
 
-      camera.position.add(cameraDirection.multiplyScalar(-direction.z));
+      camera.position.add(camDir.multiplyScalar(-direction.z));
       camera.position.add(right.multiplyScalar(direction.x));
       camera.position.y = 1.6;
 
@@ -269,5 +336,4 @@
     }
   </script>
 </body>
-
 </html>
