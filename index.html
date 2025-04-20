@@ -70,13 +70,15 @@
     let modelBoundingBox;
 
     let isDragging = false;
-    let previousMousePosition = { x: 0, y: 0 };
 
     const cameraHistory = [];
     let currentHistoryIndex = -1;
     const MAX_HISTORY = 20;
 
     let joystickVector = { x: 0, y: 0 };
+    var scale = 1;
+    var mouseX = 0;
+    var mouseY = 0;
 
     function debounce(func, wait) {
       let timeout;
@@ -115,6 +117,7 @@
 
       camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
       camera.position.set(0, 1.6, 3);
+      camera.rotation.order = "YXZ"; // Set the rotation order
 
       const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
       scene.add(ambientLight);
@@ -185,10 +188,6 @@
         keysPressed[e.key.toLowerCase()] = false;
       });
 
-      document.addEventListener('mousedown', onMouseDown, false);
-      document.addEventListener('mouseup', onMouseUp, false);
-      document.addEventListener('mousemove', onMouseMove, false);
-
       window.addEventListener('resize', debounce(() => {
         camera.aspect = window.innerWidth / window.innerHeight;
         camera.updateProjectionMatrix();
@@ -246,35 +245,6 @@
       }
     }
 
-    function onMouseDown(event) {
-      isDragging = true;
-      previousMousePosition = {
-        x: event.clientX,
-        y: event.clientY
-      };
-    }
-
-    function onMouseUp() {
-      isDragging = false;
-      saveCameraState();
-    }
-
-    function onMouseMove(event) {
-      if (!isDragging) return;
-
-      const deltaX = event.clientX - previousMousePosition.x;
-      const deltaY = event.clientY - previousMousePosition.y;
-
-      camera.rotation.y -= deltaX * 0.005;
-      camera.rotation.x -= deltaY * 0.005;
-      camera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, camera.rotation.x));
-
-      previousMousePosition = {
-        x: event.clientX,
-        y: event.clientY
-      };
-    }
-
     function addJoystickControls() {
       const joystickManager = nipplejs.create({
         zone: document.getElementById('joystick-container'),
@@ -310,12 +280,11 @@
       document.addEventListener('touchmove', (e) => {
         if (!isDragging) return;
         const touch = e.touches[0];
-        const deltaX = touch.clientX - previousMousePosition.x;
-        const deltaY = touch.clientY - previousMousePosition.y;
+        mouseX = - (touch.clientX / renderer.domElement.clientWidth) * 2 + 1;
+        mouseY = - (touch.clientY / renderer.domElement.clientHeight) * 2 + 1;
 
-        camera.rotation.y -= deltaX * 0.005;
-        camera.rotation.x -= deltaY * 0.005;
-        camera.rotation.x = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, camera.rotation.x));
+        camera.rotation.x = mouseY / scale;
+        camera.rotation.y = mouseX / scale;
 
         previousMousePosition.x = touch.clientX;
         previousMousePosition.y = touch.clientY;
@@ -332,9 +301,7 @@
       if (keysPressed['a'] || keysPressed['arrowleft']) direction.x -= moveSpeed;
       if (keysPressed['d'] || keysPressed['arrowright']) direction.x += moveSpeed;
 
-      direction.x += joystickVector.x * moveSpeed;
-      direction.z += joystickVector.y * moveSpeed;
-
+      // Calculate movement direction based on camera's local orientation
       const camDir = new THREE.Vector3();
       camera.getWorldDirection(camDir);
       camDir.y = 0;
@@ -343,6 +310,7 @@
       const right = new THREE.Vector3();
       right.crossVectors(camDir, new THREE.Vector3(0, 1, 0)).normalize();
 
+      // Move the camera based on the direction vector
       camera.position.add(camDir.multiplyScalar(-direction.z));
       camera.position.add(right.multiplyScalar(direction.x));
       camera.position.y = 1.6;
