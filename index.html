@@ -139,6 +139,9 @@
           model.scale.set(1, 1, 1);
           model.traverse((child) => {
             if (child.isMesh) {
+              child.material.map.minFilter = THREE.LinearFilter; // Prevent mipmapping issues
+              child.material.map.magFilter = THREE.LinearFilter; // Ensure proper scaling
+              child.material.map.needsUpdate = true; // Update the texture
               child.castShadow = false;
               child.receiveShadow = false;
             }
