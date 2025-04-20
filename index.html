@@ -138,10 +138,23 @@
           const model = gltf.scene;
           model.scale.set(1, 1, 1);
           model.traverse((child) => {
-            if (child.isMesh) {
-              child.material.map.minFilter = THREE.LinearFilter; // Prevent mipmapping issues
-              child.material.map.magFilter = THREE.LinearFilter; // Ensure proper scaling
-              child.material.map.needsUpdate = true; // Update the texture
+            if (child.isMesh && child.material) {
+              if (Array.isArray(child.material)) {
+                child.material.forEach(material => {
+                  if (material.map) {
+                    material.map.minFilter = THREE.LinearFilter; // Prevent mipmapping issues
+                    material.map.magFilter = THREE.LinearFilter; // Ensure proper scaling
+                    material.map.needsUpdate = true; // Update the texture
+                  }
+                });
+              } else {
+                const material = child.material;
+                if (material.map) {
+                  material.map.minFilter = THREE.LinearFilter; // Prevent mipmapping issues
+                  material.map.magFilter = THREE.LinearFilter; // Ensure proper scaling
+                  material.map.needsUpdate = true; // Update the texture
+                }
+              }
               child.castShadow = false;
               child.receiveShadow = false;
             }
