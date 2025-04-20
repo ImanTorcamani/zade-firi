@@ -32,6 +32,7 @@
       }
     }
   </script>
+  <script src="https://cdn.jsdelivr.net/npm/nipplejs@0.8.0/dist/nipplejs.min.js"></script>
 </head>
 
 <body>
@@ -54,6 +55,8 @@
 
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
+
+    let joystick;
 
     function init() {
       const canvas = document.getElementById('canvas');
@@ -120,6 +123,39 @@
           }
         }
       });
+
+      // Joystick setup for mobile devices
+      if (window.innerWidth <= 800) {
+        joystick = nipplejs.create({
+          zone: document.body,
+          mode: 'static',
+          position: { left: '50%', top: '90%' },
+          color: 'blue',
+          size: 150,
+        });
+
+        joystick.on('move', (evt, data) => {
+          const moveDirection = new THREE.Vector3();
+          moveDirection.x = data.vector.x * moveSpeed;
+          moveDirection.z = -data.vector.y * moveSpeed;
+
+          const camDir = new THREE.Vector3();
+          camera.getWorldDirection(camDir);
+          camDir.y = 0;
+          camDir.normalize();
+
+          const right = new THREE.Vector3();
+          right.crossVectors(camDir, new THREE.Vector3(0, 1, 0)).normalize();
+
+          const newPos = camera.position.clone();
+          newPos.add(camDir.multiplyScalar(-moveDirection.z));
+          newPos.add(right.multiplyScalar(moveDirection.x));
+
+          if (modelBoundingBox && modelBoundingBox.containsPoint(newPos)) {
+            camera.position.copy(newPos);
+          }
+        });
+      }
 
       // Keyboard and mouse controls
       document.addEventListener('keydown', (e) => {
