@@ -6,7 +6,6 @@
   <link rel="icon" type="image/x-icon" href="/img/ico.jpg">
   <title>3D Model Walkthrough</title>
   
-  <!-- NippleJS for mobile joystick -->
   <script src="https://cdn.jsdelivr.net/npm/nipplejs@0.9.0/dist/nipplejs.min.js"></script>
   
   <style>
@@ -117,16 +116,14 @@
       camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
       camera.position.set(0, 1.6, 3);
 
-      // Neutral Ambient Light
-      const ambientLight = new THREE.AmbientLight(0xffffff, 0.5); // Soft white light
+      const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
       scene.add(ambientLight);
 
-      // Neutral Directional Light
-      const dirLight1 = new THREE.DirectionalLight(0xffffff, 0.3); // Soft white light
+      const dirLight1 = new THREE.DirectionalLight(0xffffff, 0.3);
       dirLight1.position.set(5, 10, 7.5);
       scene.add(dirLight1);
 
-      const dirLight2 = new THREE.DirectionalLight(0xffffff, 0.3); // Soft white light
+      const dirLight2 = new THREE.DirectionalLight(0xffffff, 0.3);
       dirLight2.position.set(-5, 10, -7.5);
       scene.add(dirLight2);
 
