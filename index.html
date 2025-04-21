@@ -1,12 +1,15 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <link rel="icon" type="image/x-icon" href="/img/ico.jpg">
   <title>3D Model Animation</title>
 
   <style>
-    html, body {
+    html,
+    body {
       margin: 0;
       padding: 0;
       overflow: hidden;
@@ -23,10 +26,11 @@
 
     #joystick-container {
       position: absolute;
-      bottom: 20px;
-      left: 20px;
+      top: 10%;
+      left: 50%;
+      transform: translateX(-50%);
       z-index: 10;
-      pointer-events: auto;
+      pointer-events: none;
     }
   </style>
 
@@ -63,24 +67,39 @@
 
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
-
     let joystick;
-    let joystickVector = new THREE.Vector2(0, 0);
-    let touchStart = { x: 0, y: 0 };
+    let pointLight;
 
     function init() {
       const canvas = document.getElementById('canvas');
       renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
       renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.shadowMap.enabled = true;
+      renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+      renderer.outputColorSpace = THREE.SRGBColorSpace;
+      renderer.toneMapping = THREE.ACESFilmicToneMapping;
+      renderer.toneMappingExposure = 1.0;
+      renderer.useLegacyLights = false; // Changed from physicallyCorrectLights
 
       scene = new THREE.Scene();
       camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-      camera.position.set(0, 1.6, 0);
+      camera.position.set(0, 1.6, -0.7);
 
-      const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+      const ambientLight = new THREE.AmbientLight(0x7ec8e3 , 1);
       scene.add(ambientLight);
-      const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
-      directionalLight.position.set(5, 10, 7.5);
+
+      const hemiLight = new THREE.HemisphereLight(0xaaaaaa, 0x444444, 3);
+      hemiLight.position.set(0, 2, -2);
+      scene.add(hemiLight);
+
+      const directionalLight = new THREE.DirectionalLight(0xffffff, 3);
+      directionalLight.position.set(0, 10, 0);
+      directionalLight.castShadow = true;
+      directionalLight.shadow.mapSize.width = 1024;
+      directionalLight.shadow.mapSize.height = 1024;
+      directionalLight.shadow.camera.near = 1;
+      directionalLight.shadow.camera.far = 50;
       scene.add(directionalLight);
 
       const dracoLoader = new DRACOLoader();
@@ -90,15 +109,33 @@
 
       modelLoader.load('model.glb', (gltf) => {
         const model = gltf.scene;
+        model.traverse(child => {
+          if (child.isMesh) {
+            child.castShadow = true;
+            child.receiveShadow = true;
+          }
+        });
         scene.add(model);
 
-        modelBoundingBox = new THREE.Box3().setFromObject(model);
+        modelBoundingBox = new THREE.Box3().setFromObject(model).expandByScalar(-0.7);
 
         animatedObject = model.getObjectByName("Animated");
-        if (!animatedObject) {
-          console.error("Animated object not found in the model.");
+        const lightObject = model.getObjectByName("Light");
+
+        if (!animatedObject || !lightObject) {
+          console.error("Animated object or Light object not found in the model.");
           return;
         }
+
+        // Create and position the point light
+        pointLight = new THREE.PointLight(0xffffff, 1, 10);
+        pointLight.position.copy(lightObject.position);
+        scene.add(pointLight);
+
+        // Set light properties
+        pointLight.decay = 2;
+        pointLight.distance = 10;
+        pointLight.intensity = 1;
 
         mixer = new THREE.AnimationMixer(animatedObject);
         const action = mixer.clipAction(gltf.animations.find(anim => anim.name === 'animation'));
@@ -137,31 +174,48 @@
         joystick = nipplejs.create({
           zone: document.getElementById('joystick-container'),
           mode: 'static',
-          position: { left: '50px', bottom: '50px' },
+          position: { left: '50%', top: '50%' },
           color: 'blue',
-          size: 120
+          size: 150,
         });
 
         joystick.on('move', (evt, data) => {
-          joystickVector.set(data.vector.x, data.vector.y);
-        });
+          const moveDirection = new THREE.Vector3();
+          moveDirection.x = data.vector.x * moveSpeed;
+          moveDirection.z = -data.vector.y * moveSpeed;
 
-        joystick.on('end', () => {
-          joystickVector.set(0, 0);
-        });
+          const camDir = new THREE.Vector3();
+          camera.getWorldDirection(camDir);
+          camDir.y = 0;
+          camDir.normalize();
 
-        window.addEventListener('touchstart', (event) => {
-          touchStart.x = event.touches[0].clientX;
-        });
+          const right = new THREE.Vector3();
+          right.crossVectors(camDir, new THREE.Vector3(0, 1, 0)).normalize();
 
-        window.addEventListener('touchmove', (event) => {
-          if (event.touches.length == 1) {
-            const deltaX = event.touches[0].clientX - touchStart.x;
-            rotationY -= deltaX * 0.005;
-            touchStart.x = event.touches[0].clientX;
+          const newPos = camera.position.clone();
+          newPos.add(camDir.multiplyScalar(-moveDirection.z));
+          newPos.add(right.multiplyScalar(moveDirection.x));
+
+          if (modelBoundingBox && modelBoundingBox.containsPoint(newPos)) {
+            camera.position.copy(newPos);
           }
         });
       }
+
+      let touchStart = { x: 0, y: 0 };
+
+      window.addEventListener('touchstart', (event) => {
+        touchStart.x = event.touches[0].clientX;
+        touchStart.y = event.touches[0].clientY;
+      });
+
+      window.addEventListener('touchmove', (event) => {
+        if (event.touches.length == 1) {
+          const deltaX = event.touches[0].clientX - touchStart.x;
+          rotationY += deltaX * 0.005;
+          camera.rotation.y = rotationY;
+        }
+      });
 
       document.addEventListener('keydown', (e) => {
         keysPressed[e.key.toLowerCase()] = true;
@@ -196,13 +250,15 @@
       requestAnimationFrame(animate);
       if (mixer) mixer.update(0.01);
 
+      // Update the light position only if objects exist
+      if (animatedObject && pointLight) {
+        const lightObject = animatedObject.getObjectByName("Light");
+        if (lightObject) {
+          pointLight.position.copy(lightObject.position);
+        }
+      }
+
       const moveDirection = new THREE.Vector3();
-
-      // Joystick movement
-      moveDirection.x += joystickVector.x * moveSpeed;
-      moveDirection.z -= joystickVector.y * moveSpeed;
-
-      // Keyboard movement
       if (keysPressed['w'] || keysPressed['arrowup']) moveDirection.z -= moveSpeed;
       if (keysPressed['s'] || keysPressed['arrowdown']) moveDirection.z += moveSpeed;
       if (keysPressed['a'] || keysPressed['arrowleft']) moveDirection.x -= moveSpeed;
@@ -220,8 +276,6 @@
       newPos.add(camDir.multiplyScalar(-moveDirection.z));
       newPos.add(right.multiplyScalar(moveDirection.x));
 
-      camera.rotation.y = rotationY;
-
       if (modelBoundingBox && modelBoundingBox.containsPoint(newPos)) {
         camera.position.copy(newPos);
       }
@@ -232,4 +286,5 @@
     init();
   </script>
 </body>
+
 </html>
