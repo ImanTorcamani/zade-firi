@@ -5,7 +5,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <link rel="icon" type="image/x-icon" href="/img/ico.jpg">
-  <title>3D Model Animation</title>
+  <title>3D Model Animation with Ray Tracing</title>
 
   <style>
     html,
@@ -32,6 +32,16 @@
       z-index: 10;
       pointer-events: none;
     }
+
+    #loading {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      color: white;
+      font-family: Arial, sans-serif;
+      font-size: 24px;
+    }
   </style>
 
   <script type="importmap">
@@ -39,7 +49,13 @@
       "imports": {
         "three": "https://cdn.jsdelivr.net/npm/three@0.152.2/build/three.module.js",
         "three/examples/jsm/loaders/GLTFLoader.js": "https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/loaders/GLTFLoader.js",
-        "three/examples/jsm/loaders/DRACOLoader.js": "https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/loaders/DRACOLoader.js"
+        "three/examples/jsm/loaders/DRACOLoader.js": "https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/loaders/DRACOLoader.js",
+        "three/examples/jsm/postprocessing/EffectComposer.js": "https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/postprocessing/EffectComposer.js",
+        "three/examples/jsm/postprocessing/RenderPass.js": "https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/postprocessing/RenderPass.js",
+        "three/examples/jsm/postprocessing/ShaderPass.js": "https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/postprocessing/ShaderPass.js",
+        "three/examples/jsm/shaders/CopyShader.js": "https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/shaders/CopyShader.js",
+        "three/examples/jsm/shaders/LuminosityHighPassShader.js": "https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/shaders/LuminosityHighPassShader.js",
+        "three/examples/jsm/postprocessing/UnrealBloomPass.js": "https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/postprocessing/UnrealBloomPass.js"
       }
     }
   </script>
@@ -49,13 +65,20 @@
 <body>
   <canvas id="canvas"></canvas>
   <div id="joystick-container"></div>
+  <div id="loading">Loading...</div>
 
   <script type="module">
     import * as THREE from 'three';
     import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
     import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
+    import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+    import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+    import { ShaderPass } from 'three/examples/jsm/postprocessing/ShaderPass.js';
+    import { CopyShader } from 'three/examples/jsm/shaders/CopyShader.js';
+    import { LuminosityHighPassShader } from 'three/examples/jsm/shaders/LuminosityHighPassShader.js';
+    import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 
-    let camera, scene, renderer, mixer;
+    let camera, scene, renderer, mixer, composer;
     let animationPlayed = false;
     let animatedObject = null;
     let modelBoundingBox;
@@ -69,38 +92,64 @@
     const mouse = new THREE.Vector2();
     let joystick;
     let pointLight;
+    let bloomPass;
 
     function init() {
       const canvas = document.getElementById('canvas');
-      renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+      renderer = new THREE.WebGLRenderer({ 
+        canvas, 
+        antialias: true,
+        powerPreference: "high-performance"
+      });
       renderer.setSize(window.innerWidth, window.innerHeight);
       renderer.shadowMap.enabled = true;
       renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-
+      renderer.physicallyCorrectLights = true;
       renderer.outputColorSpace = THREE.SRGBColorSpace;
       renderer.toneMapping = THREE.ACESFilmicToneMapping;
       renderer.toneMappingExposure = 1.0;
-      renderer.useLegacyLights = false; // Changed from physicallyCorrectLights
+      renderer.useLegacyLights = false;
 
       scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x000000);
       camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
       camera.position.set(0, 1.6, -0.7);
 
-      const ambientLight = new THREE.AmbientLight(0x7ec8e3 , 1);
+      // Enhanced lighting setup for ray-traced look
+      const ambientLight = new THREE.AmbientLight(0x7ec8e3, 1);
       scene.add(ambientLight);
 
-      const hemiLight = new THREE.HemisphereLight(0xaaaaaa, 0x444444, 3);
+      const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 3);
       hemiLight.position.set(0, 2, -2);
       scene.add(hemiLight);
 
       const directionalLight = new THREE.DirectionalLight(0xffffff, 3);
       directionalLight.position.set(0, 10, 0);
       directionalLight.castShadow = true;
-      directionalLight.shadow.mapSize.width = 1024;
-      directionalLight.shadow.mapSize.height = 1024;
+      directionalLight.shadow.mapSize.width = 2048; // Higher resolution for better shadows
+      directionalLight.shadow.mapSize.height = 2048;
       directionalLight.shadow.camera.near = 1;
       directionalLight.shadow.camera.far = 50;
+      directionalLight.shadow.bias = -0.001; // Reduce shadow acne
       scene.add(directionalLight);
+
+      // Add a subtle fill light
+      const fillLight = new THREE.DirectionalLight(0x7ec8e3, 0.5);
+      fillLight.position.set(-5, 5, 5);
+      scene.add(fillLight);
+
+      // Setup post-processing for bloom/glow effects
+      const renderScene = new RenderPass(scene, camera);
+      bloomPass = new UnrealBloomPass(
+        new THREE.Vector2(window.innerWidth, window.innerHeight),
+        1.5, // strength
+        0.4, // radius
+        0.85 // threshold
+      );
+
+      composer = new EffectComposer(renderer);
+      composer.addPass(renderScene);
+      composer.addPass(bloomPass);
 
       const dracoLoader = new DRACOLoader();
       dracoLoader.setDecoderPath('./draco/');
@@ -108,11 +157,20 @@
       modelLoader.setDRACOLoader(dracoLoader);
 
       modelLoader.load('model.glb', (gltf) => {
+        document.getElementById('loading').style.display = 'none';
+        
         const model = gltf.scene;
         model.traverse(child => {
           if (child.isMesh) {
             child.castShadow = true;
             child.receiveShadow = true;
+            
+            // Enhance materials for better lighting response
+            if (child.material) {
+              child.material.roughness = 0.1;
+              child.material.metalness = 0.9;
+              child.material.envMapIntensity = 0.5;
+            }
           }
         });
         scene.add(model);
@@ -127,15 +185,18 @@
           return;
         }
 
-        // Create and position the point light
-        pointLight = new THREE.PointLight(0xffffff, 1, 10);
+        // Create and position the point light with enhanced settings
+        pointLight = new THREE.PointLight(0xffffff, 5, 15, 2);
         pointLight.position.copy(lightObject.position);
+        pointLight.castShadow = true;
+        pointLight.shadow.mapSize.width = 1024;
+        pointLight.shadow.mapSize.height = 1024;
+        pointLight.shadow.bias = -0.001;
         scene.add(pointLight);
 
-        // Set light properties
-        pointLight.decay = 2;
-        pointLight.distance = 10;
-        pointLight.intensity = 1;
+        // Add light helper (for debugging)
+        // const lightHelper = new THREE.PointLightHelper(pointLight);
+        // scene.add(lightHelper);
 
         mixer = new THREE.AnimationMixer(animatedObject);
         const action = mixer.clipAction(gltf.animations.find(anim => anim.name === 'animation'));
@@ -152,6 +213,7 @@
         camera.aspect = window.innerWidth / window.innerHeight;
         camera.updateProjectionMatrix();
         renderer.setSize(window.innerWidth, window.innerHeight);
+        composer.setSize(window.innerWidth, window.innerHeight);
       });
 
       window.addEventListener('click', (event) => {
@@ -280,7 +342,8 @@
         camera.position.copy(newPos);
       }
 
-      renderer.render(scene, camera);
+      // Render with post-processing
+      composer.render();
     }
 
     init();
