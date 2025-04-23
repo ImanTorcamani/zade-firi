@@ -83,6 +83,14 @@
     <label>Metalness: <input type="range" id="metalnessSlider" min="0" max="1" step="0.01" value="0.5"></label>
     <label>EnvMap Intensity: <input type="range" id="envSlider" min="0" max="1" step="0.01" value="0.3"></label>
     <label>HDRI Intensity: <input type="range" id="hdriSlider" min="0" max="5" step="0.1" value="1"></label>
+    <label>Resolution: 
+      <select id="resolutionSelect">
+        <option value="1">100%</option>
+        <option value="0.75">75%</option>
+        <option value="0.5">50%</option>
+        <option value="0.25">25%</option>
+      </select>
+    </label>
     <button id="playAnimation">Play Animation</button>
   </div>
 
@@ -126,7 +134,7 @@
         hdrTexture.mapping = THREE.EquirectangularReflectionMapping;
         scene.environment = hdrTexture;
         scene.background = hdrTexture;
-        // Removed colorSpace setting to fix sRGB warning
+        hdrTexture.colorSpace = THREE.SRGBColorSpace;
       });
 
     document.getElementById('hdriSlider').oninput = (e) => {
@@ -176,6 +184,13 @@
       if (animationAction) {
         animationAction.reset().play();
       }
+    });
+
+    document.getElementById('resolutionSelect').addEventListener('change', (e) => {
+      const value = parseFloat(e.target.value);
+      renderer.setPixelRatio(value);
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      composer.setSize(window.innerWidth, window.innerHeight);
     });
 
     function updateMaterialUI() {
