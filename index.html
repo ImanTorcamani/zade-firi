@@ -63,7 +63,8 @@
         "three/examples/jsm/loaders/RGBELoader.js": "https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/loaders/RGBELoader.js",
         "three/examples/jsm/postprocessing/EffectComposer.js": "https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/postprocessing/EffectComposer.js",
         "three/examples/jsm/postprocessing/RenderPass.js": "https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/postprocessing/RenderPass.js",
-        "three/examples/jsm/postprocessing/UnrealBloomPass.js": "https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/postprocessing/UnrealBloomPass.js"
+        "three/examples/jsm/postprocessing/UnrealBloomPass.js": "https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/postprocessing/UnrealBloomPass.js",
+        "three-mesh-bvh": "https://cdn.jsdelivr.net/npm/three-mesh-bvh@0.5.23/build/index.module.js"
       }
     }
   </script>
@@ -98,6 +99,7 @@
     import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
     import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
     import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+    import { MeshBVH, acceleratedRaycast, MeshBVHVisualizer } from 'three-mesh-bvh';
 
     let camera, scene, renderer, composer;
     let mixer, animationAction, animatedObject = null;
@@ -123,15 +125,15 @@
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
     camera.position.set(0, 1.6, -1);
 
-    // ✅ Corrected HDRI Loader
-    let hdrTexture;
+    let boundingMesh = null;
+    let tempCapsule = { start: new THREE.Vector3(), end: new THREE.Vector3(), radius: 0.1 };
+
     new RGBELoader()
       .setPath('./')
       .load('my_hdri.hdr', function (texture) {
-        hdrTexture = texture;
-        hdrTexture.mapping = THREE.EquirectangularReflectionMapping;
-        scene.environment = hdrTexture;
-        scene.background = hdrTexture;
+        texture.mapping = THREE.EquirectangularReflectionMapping;
+        scene.environment = texture;
+        scene.background = texture;
       });
 
     document.getElementById('hdriSlider').oninput = (e) => {
@@ -156,6 +158,15 @@
     draco.setDecoderPath('./draco/');
     const loader = new GLTFLoader();
     loader.setDRACOLoader(draco);
+
+    loader.load('Bounding.glb', (gltf) => {
+      boundingMesh = gltf.scene.children[0];
+      boundingMesh.visible = false;
+      MeshBVH.computeBoundsTree(boundingMesh.geometry);
+      boundingMesh.geometry.boundsTree = new MeshBVH(boundingMesh.geometry);
+      THREE.Mesh.prototype.raycast = acceleratedRaycast;
+      scene.add(boundingMesh);
+    });
 
     loader.load('model.glb', (gltf) => {
       document.getElementById('loading').style.display = 'none';
@@ -290,8 +301,20 @@
       direction.normalize();
 
       const speed = 3;
-      velocity.copy(direction).applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw).multiplyScalar(speed * delta);
-      camera.position.add(velocity);
+      const moveDelta = direction.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw).multiplyScalar(speed * delta);
+      
+      const newPos = camera.position.clone().add(moveDelta);
+
+      if (boundingMesh && boundingMesh.geometry.boundsTree) {
+        tempCapsule.start.copy(newPos);
+        tempCapsule.end.copy(newPos);
+        const res = boundingMesh.geometry.boundsTree.intersectsCapsule(tempCapsule);
+        if (!res) {
+          camera.position.copy(newPos);
+        }
+      } else {
+        camera.position.copy(newPos);
+      }
 
       camera.rotation.order = 'YXZ';
       camera.rotation.y = yaw;
