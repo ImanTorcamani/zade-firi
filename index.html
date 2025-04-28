@@ -63,8 +63,7 @@
         "three/examples/jsm/loaders/RGBELoader.js": "https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/loaders/RGBELoader.js",
         "three/examples/jsm/postprocessing/EffectComposer.js": "https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/postprocessing/EffectComposer.js",
         "three/examples/jsm/postprocessing/RenderPass.js": "https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/postprocessing/RenderPass.js",
-        "three/examples/jsm/postprocessing/UnrealBloomPass.js": "https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/postprocessing/UnrealBloomPass.js",
-        "three-mesh-bvh": "https://cdn.jsdelivr.net/npm/three-mesh-bvh@0.5.23/build/index.module.js"
+        "three/examples/jsm/postprocessing/UnrealBloomPass.js": "https://cdn.jsdelivr.net/npm/three@0.152.2/examples/jsm/postprocessing/UnrealBloomPass.js"
       }
     }
   </script>
@@ -99,7 +98,6 @@
     import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
     import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
     import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
-    import { MeshBVH, acceleratedRaycast, MeshBVHVisualizer } from 'three-mesh-bvh';
 
     let camera, scene, renderer, composer;
     let mixer, animationAction, animatedObject = null;
@@ -108,7 +106,6 @@
     const move = { forward: false, backward: false, left: false, right: false };
     const velocity = new THREE.Vector3();
     const direction = new THREE.Vector3();
-
     let yaw = 0, pitch = 0;
     const modelMaterialList = [];
 
@@ -121,12 +118,8 @@
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
 
     scene = new THREE.Scene();
-
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
     camera.position.set(0, 1.6, -1);
-
-    let boundingMesh = null;
-    let tempCapsule = { start: new THREE.Vector3(), end: new THREE.Vector3(), radius: 0.1 };
 
     new RGBELoader()
       .setPath('./')
@@ -136,17 +129,17 @@
         scene.background = texture;
       });
 
-    document.getElementById('hdriSlider').oninput = (e) => {
-      const intensity = parseFloat(e.target.value);
-      setHDRIntensity(intensity);
-    };
-
     function setHDRIntensity(intensity) {
       modelMaterialList.forEach(mat => {
         mat.envMapIntensity = intensity;
         mat.needsUpdate = true;
       });
     }
+
+    document.getElementById('hdriSlider').oninput = (e) => {
+      const intensity = parseFloat(e.target.value);
+      setHDRIntensity(intensity);
+    };
 
     const renderScene = new RenderPass(scene, camera);
     const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
@@ -158,15 +151,6 @@
     draco.setDecoderPath('./draco/');
     const loader = new GLTFLoader();
     loader.setDRACOLoader(draco);
-
-    loader.load('Bounding.glb', (gltf) => {
-      boundingMesh = gltf.scene.children[0];
-      boundingMesh.visible = false;
-      MeshBVH.computeBoundsTree(boundingMesh.geometry);
-      boundingMesh.geometry.boundsTree = new MeshBVH(boundingMesh.geometry);
-      THREE.Mesh.prototype.raycast = acceleratedRaycast;
-      scene.add(boundingMesh);
-    });
 
     loader.load('model.glb', (gltf) => {
       document.getElementById('loading').style.display = 'none';
@@ -288,39 +272,153 @@
       composer.setSize(window.innerWidth, window.innerHeight);
     });
 
+    // Movement control
+    scene = new THREE.Scene();
+    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.set(0, 1.6, -1);
+    
+    // Load model
+
+    loader.load('model.glb', (gltf) => {
+      const model = gltf.scene;
+      model.traverse(child => {
+        if (child.isMesh && child.material) {
+          child.castShadow = true;
+          child.receiveShadow = true;
+        }
+      });
+      scene.add(model);
+    
+      if (gltf.animations.length > 0) {
+        mixer = new THREE.AnimationMixer(model);
+        animationAction = mixer.clipAction(gltf.animations[0]);
+        animationAction.clampWhenFinished = true;
+        animationAction.loop = THREE.LoopOnce;
+      }
+    });
+    
+// Create a raycaster for collision detection
+const raycaster = new THREE.Raycaster();
+const collisionDistance = 0.5; // Minimum distance to detect collisions
+
+function detectCollision() {
+  // Set raycaster position to camera
+  raycaster.ray.origin.copy(camera.position);
+
+  // Set ray direction based on camera's current movement direction
+  raycaster.ray.direction.set(direction.x, direction.y, direction.z).normalize();
+
+  // Find intersected objects in the scene (model faces)
+  const intersects = raycaster.intersectObjects(scene.children, true); // true to check all child meshes
+
+  return intersects.length > 0;
+}
+
+function handleCameraMovement() {
+  direction.set(0, 0, 0);
+  if (move.forward) direction.z -= 1;
+  if (move.backward) direction.z += 1;
+  if (move.left) direction.x -= 1;
+  if (move.right) direction.x += 1;
+
+  direction.normalize();
+
+  const speed = 3;
+  const moveDelta = direction.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw).multiplyScalar(speed * clock.getDelta());
+
+  // Before moving, check for collisions
+  const newPos = camera.position.clone().add(moveDelta);
+  raycaster.ray.origin.copy(newPos); // Start raycasting from the new position
+
+  if (!detectCollision()) {
+    camera.position.copy(newPos); // Move camera only if no collision detected
+  }
+}
+
+// Handle input for camera movement
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'w') move.forward = true;
+  if (e.key === 's') move.backward = true;
+  if (e.key === 'a') move.left = true;
+  if (e.key === 'd') move.right = true;
+});
+
+window.addEventListener('keyup', (e) => {
+  if (e.key === 'w') move.forward = false;
+  if (e.key === 's') move.backward = false;
+  if (e.key === 'a') move.left = false;
+  if (e.key === 'd') move.right = false;
+});
+
+    
+    function updateMovement() {
+      direction.set(0, 0, 0);
+      if (move.forward) direction.z -= 1;
+      if (move.backward) direction.z += 1;
+      if (move.left) direction.x -= 1;
+      if (move.right) direction.x += 1;
+    
+      direction.normalize();
+    
+      const speed = 3;
+      const moveDelta = direction.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw).multiplyScalar(speed * clock.getDelta());
+    
+      // Before moving, check for collisions
+      const newPos = camera.position.clone().add(moveDelta);
+      raycaster.ray.origin.copy(newPos); // Start raycasting from the new position
+      if (!detectCollision()) {
+        camera.position.copy(newPos); // Move camera only if no collision detected
+      }
+    }
+    
+    // Handle input for camera movement
+    window.addEventListener('keydown', (e) => {
+      if (e.key === 'w') move.forward = true;
+      if (e.key === 's') move.backward = true;
+      if (e.key === 'a') move.left = true;
+      if (e.key === 'd') move.right = true;
+    });
+    
+    window.addEventListener('keyup', (e) => {
+      if (e.key === 'w') move.forward = false;
+      if (e.key === 's') move.backward = false;
+      if (e.key === 'a') move.left = false;
+      if (e.key === 'd') move.right = false;
+    });
+    
+  
+    
+
     function animate() {
       requestAnimationFrame(animate);
       const delta = clock.getDelta();
       if (mixer) mixer.update(delta);
-
+    
+      // Movement and camera updates
       direction.set(0, 0, 0);
       if (move.forward) direction.z -= 1;
       if (move.backward) direction.z += 1;
       if (move.left) direction.x -= 1;
       if (move.right) direction.x += 1;
       direction.normalize();
-
+    
       const speed = 3;
       const moveDelta = direction.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw).multiplyScalar(speed * delta);
-      
-      const newPos = camera.position.clone().add(moveDelta);
-
-      if (boundingMesh && boundingMesh.geometry.boundsTree) {
-        tempCapsule.start.copy(newPos);
-        tempCapsule.end.copy(newPos);
-        const res = boundingMesh.geometry.boundsTree.intersectsCapsule(tempCapsule);
-        if (!res) {
-          camera.position.copy(newPos);
-        }
-      } else {
-        camera.position.copy(newPos);
-      }
-
+      camera.position.add(moveDelta);
+    
       camera.rotation.order = 'YXZ';
       camera.rotation.y = yaw;
       camera.rotation.x = pitch;
-
-      composer.render();
+    
+      // Update all objects' world matrices
+      scene.traverse(child => {
+        if (child instanceof THREE.Mesh) {
+          child.updateMatrixWorld();
+        }
+      });
+    
+      // Render the scene using the renderer
+      renderer.render(scene, camera);
     }
 
     animate();
