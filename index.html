@@ -306,32 +306,39 @@ function detectCollision() {
   raycaster.ray.origin.copy(camera.position);
 
   // Set ray direction based on camera's current movement direction
-  raycaster.ray.direction.set(direction.x, direction.y, direction.z).normalize();
+  raycaster.ray.direction.copy(moveDirection).normalize();
 
   // Find intersected objects in the scene (model faces)
   const intersects = raycaster.intersectObjects(scene.children, true); // true to check all child meshes
 
-  return intersects.length > 0;
+  return intersects.length > 0 && intersects[0].distance < collisionDistance;
 }
 
 function handleCameraMovement() {
-  direction.set(0, 0, 0);
-  if (move.forward) direction.z -= 1;
-  if (move.backward) direction.z += 1;
-  if (move.left) direction.x -= 1;
-  if (move.right) direction.x += 1;
+  moveDirection.set(0, 0, 0);
 
-  direction.normalize();
+  // Set movement direction based on user input
+  if (move.forward) moveDirection.z -= 1;
+  if (move.backward) moveDirection.z += 1;
+  if (move.left) moveDirection.x -= 1;
+  if (move.right) moveDirection.x += 1;
+
+  moveDirection.normalize();
 
   const speed = 3;
   const moveDelta = direction.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw).multiplyScalar(speed * clock.getDelta());
 
   // Before moving, check for collisions
-  const newPos = camera.position.clone().add(moveDelta);
+  const newCameraPosition = camera.position.clone().add(moveDelta);
   raycaster.ray.origin.copy(newPos); // Start raycasting from the new position
 
-  if (!detectCollision()) {
-    camera.position.copy(newPos); // Move camera only if no collision detected
+  camera.position.copy(newCameraPosition);
+
+  if (detectCollision()) {
+    camera.position.copy(camera.position); // Keep the camera at the previous position if collision detected
+  } else {
+    // If no collision, actually move the camera
+    camera.position.copy(newCameraPosition);
   }
 }
 
