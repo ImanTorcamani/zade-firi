@@ -110,12 +110,22 @@
     const modelMaterialList = [];
 
     const canvas = document.getElementById('canvas');
-    renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+    renderer = new THREE.WebGLRenderer({
+      canvas,
+      antialias: false,  // TURN OFF antialiasing (big performance gain on phones)
+      powerPreference: 'high-performance', // Tell GPU to prioritize speed
+      alpha: false, // No need for transparent background
+      depth: true,
+      stencil: false,  // Turn off stencil buffer if not needed
+      logarithmicDepthBuffer: false, // Safer for mobile
+      precision: 'mediump' // 'highp' is heavy, 'mediump' is faster
+    });
+    
     renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-    renderer.shadowMap.enabled = true;
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1)); // Always cap it to 1 on mobiles
+    renderer.shadowMap.enabled = false; // SHADOWS are super expensive
     renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMapping = THREE.NoToneMapping; // ACES is expensive, NoToneMapping is faster
 
     scene = new THREE.Scene();
     camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
@@ -162,7 +172,7 @@
           child.receiveShadow = true;
           child.material.roughness = 0.4;
           child.material.metalness = 0.5;
-          child.material.envMapIntensity = 0.3;
+          child.material.envMapIntensity = 0.9;
           modelMaterialList.push(child.material);
         }
       });
