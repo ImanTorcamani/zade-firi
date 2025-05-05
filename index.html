@@ -90,276 +90,168 @@
     <button id="playAnimation">Play Animation</button>
   </div>
 
-  <script type="module">
-    import * as THREE from 'three';
-    import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
-    import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
-    import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
-    import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
-    import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
-    import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
+<script type="module">
+import * as THREE from 'three';
+import { GLTFLoader } from 'three/examples/jsm/loaders/GLTFLoader.js';
+import { DRACOLoader } from 'three/examples/jsm/loaders/DRACOLoader.js';
+import { RGBELoader } from 'three/examples/jsm/loaders/RGBELoader.js';
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 
-    let camera, scene, renderer, composer;
-    let mixer, animationAction, animatedObject = null;
-    let clock = new THREE.Clock();
-
-    const move = { forward: false, backward: false, left: false, right: false };
-    const velocity = new THREE.Vector3();
-    const direction = new THREE.Vector3();
-    let yaw = 0, pitch = 0;
-    const modelMaterialList = [];
-
-    const canvas = document.getElementById('canvas');
-    renderer = new THREE.WebGLRenderer({
-      canvas,
-      antialias: false,  // TURN OFF antialiasing (big performance gain on phones)
-      powerPreference: 'high-performance', // Tell GPU to prioritize speed
-      alpha: false, // No need for transparent background
-      depth: true,
-      stencil: false,  // Turn off stencil buffer if not needed
-      logarithmicDepthBuffer: false, // Safer for mobile
-      precision: 'mediump' // 'highp' is heavy, 'mediump' is faster
-    });
-    
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1)); // Always cap it to 1 on mobiles
-    renderer.shadowMap.enabled = false; // SHADOWS are super expensive
-    renderer.outputColorSpace = THREE.SRGBColorSpace;
-    renderer.toneMapping = THREE.NoToneMapping; // ACES is expensive, NoToneMapping is faster
-
-    scene = new THREE.Scene();
-    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.set(0, 1.6, -1);
-
-    new RGBELoader()
-      .setPath('./')
-      .load('my_hdri.hdr', function (texture) {
-        texture.mapping = THREE.EquirectangularReflectionMapping;
-        scene.environment = texture;
-        scene.background = texture;
-      });
-
-    function setHDRIntensity(intensity) {
-      modelMaterialList.forEach(mat => {
-        mat.envMapIntensity = intensity;
-        mat.needsUpdate = true;
-      });
-    }
-
-    document.getElementById('hdriSlider').oninput = (e) => {
-      const intensity = parseFloat(e.target.value);
-      setHDRIntensity(intensity);
-    };
-
-    const renderScene = new RenderPass(scene, camera);
-    const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
-    composer = new EffectComposer(renderer);
-    composer.addPass(renderScene);
-    composer.addPass(bloom);
-
-    const draco = new DRACOLoader();
-    draco.setDecoderPath('./draco/');
-    const loader = new GLTFLoader();
-    loader.setDRACOLoader(draco);
-
-    loader.load('model.glb', (gltf) => {
-      document.getElementById('loading').style.display = 'none';
-      const model = gltf.scene;
-      model.traverse(child => {
-        if (child.name === 'Animated') animatedObject = child;
-        if (child.isMesh && child.material) {
-          child.castShadow = true;
-          child.receiveShadow = true;
-          child.material.roughness = 0.4;
-          child.material.metalness = 0.5;
-          child.material.envMapIntensity = 0.9;
-          modelMaterialList.push(child.material);
-        }
-      });
-      scene.add(model);
-
-      if (gltf.animations.length > 0) {
-        mixer = new THREE.AnimationMixer(model);
-        animationAction = mixer.clipAction(gltf.animations[0]);
-        animationAction.clampWhenFinished = true;
-        animationAction.loop = THREE.LoopOnce;
-      }
-
-      setHDRIntensity(1.5);
-    });
-
-    document.getElementById('playAnimation').addEventListener('click', () => {
-      if (animationAction) {
-        animationAction.reset().play();
-      }
-    });
-
-    document.getElementById('resolutionSelect').addEventListener('change', (e) => {
-      const value = parseFloat(e.target.value);
-      renderer.setPixelRatio(value);
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      composer.setSize(window.innerWidth, window.innerHeight);
-    });
-
-    function updateMaterialUI() {
-      const rough = parseFloat(document.getElementById('roughnessSlider').value);
-      const metal = parseFloat(document.getElementById('metalnessSlider').value);
-      const env = parseFloat(document.getElementById('envSlider').value);
-      modelMaterialList.forEach(mat => {
-        mat.roughness = rough;
-        mat.metalness = metal;
-        mat.envMapIntensity = env;
-      });
-    }
-    ['roughnessSlider', 'metalnessSlider', 'envSlider'].forEach(id =>
-      document.getElementById(id).oninput = updateMaterialUI
-    );
-
-    window.addEventListener('keydown', (e) => {
-      if (e.key === 'w') move.forward = true;
-      if (e.key === 's') move.backward = true;
-      if (e.key === 'a') move.left = true;
-      if (e.key === 'd') move.right = true;
-    });
-
-    window.addEventListener('keyup', (e) => {
-      if (e.key === 'w') move.forward = false;
-      if (e.key === 's') move.backward = false;
-      if (e.key === 'a') move.left = false;
-      if (e.key === 'd') move.right = false;
-    });
-
-    document.body.addEventListener('mousemove', (e) => {
-      if (e.buttons !== 1) return;
-      yaw -= e.movementX * 0.002;
-      pitch -= e.movementY * 0.002;
-      pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, pitch));
-    });
-
-    let lastTouch = null;
-    document.body.addEventListener('touchmove', (e) => {
-      if (!lastTouch) {
-        lastTouch = e.touches[0];
-        return;
-      }
-      const dx = e.touches[0].clientX - lastTouch.clientX;
-      const dy = e.touches[0].clientY - lastTouch.clientY;
-      yaw -= dx * 0.002;
-      pitch -= dy * 0.002;
-      pitch = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, pitch));
-      lastTouch = e.touches[0];
-    });
-
-    document.body.addEventListener('touchend', () => {
-      lastTouch = null;
-    });
-
-    if (/Mobi|Android|iPhone/i.test(navigator.userAgent)) {
-      const joystick = nipplejs.create({
-        zone: document.getElementById('joystick-container'),
-        mode: 'static',
-        position: { left: '60px', bottom: '60px' },
-        color: 'blue'
-      });
-
-      joystick.on('move', (evt, data) => {
-        if (!data.direction) return;
-        move.forward = data.direction.y === 'up';
-        move.backward = data.direction.y === 'down';
-        move.left = data.direction.x === 'left';
-        move.right = data.direction.x === 'right';
-      });
-
-      joystick.on('end', () => {
-        move.forward = move.backward = move.left = move.right = false;
-      });
-    }
-
-    window.addEventListener('resize', () => {
-      camera.aspect = window.innerWidth / window.innerHeight;
-      camera.updateProjectionMatrix();
-      renderer.setSize(window.innerWidth, window.innerHeight);
-      composer.setSize(window.innerWidth, window.innerHeight);
-    });
-
-    // Movement control
-    scene = new THREE.Scene();
-    camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-    camera.position.set(0, 1.6, -1);
-    
-    // Load model
-
-    loader.load('model.glb', (gltf) => {
-      const model = gltf.scene;
-      model.traverse(child => {
-        if (child.isMesh && child.material) {
-          child.castShadow = true;
-          child.receiveShadow = true;
-        }
-      });
-      scene.add(model);
-    
-      if (gltf.animations.length > 0) {
-        mixer = new THREE.AnimationMixer(model);
-        animationAction = mixer.clipAction(gltf.animations[0]);
-        animationAction.clampWhenFinished = true;
-        animationAction.loop = THREE.LoopOnce;
-      }
-    });
-    
-// Create a raycaster for collision detection
+let camera, scene, renderer, composer;
+let mixer, animationAction, animatedObject = null;
+const clock = new THREE.Clock();
+const move = { forward: false, backward: false, left: false, right: false };
+const moveDirection = new THREE.Vector3();
+const direction = new THREE.Vector3();
 const raycaster = new THREE.Raycaster();
-const collisionDistance = 0.5; // Minimum distance to detect collisions
+const modelMaterialList = [];
+let yaw = 0, pitch = 0;
 
-function detectCollision() {
-  // Set raycaster position to camera
-  raycaster.ray.origin.copy(camera.position);
+const canvas = document.getElementById('canvas');
+renderer = new THREE.WebGLRenderer({
+  canvas,
+  antialias: false,
+  powerPreference: 'high-performance',
+  alpha: false,
+  depth: true,
+  stencil: false,
+  logarithmicDepthBuffer: false,
+  precision: 'mediump'
+});
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1));
+renderer.shadowMap.enabled = false;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.NoToneMapping;
 
-  // Set ray direction based on camera's current movement direction
-  raycaster.ray.direction.copy(moveDirection).normalize();
+scene = new THREE.Scene();
+camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+camera.position.set(0, 1.6, -1);
 
-  // Find intersected objects in the scene (model faces)
-  const intersects = raycaster.intersectObjects(scene.children, true); // true to check all child meshes
+new RGBELoader()
+  .setPath('./')
+  .load('my_hdri.hdr', function (texture) {
+    texture.mapping = THREE.EquirectangularReflectionMapping;
+    scene.environment = texture;
+    scene.background = texture;
+  });
 
-  return intersects.length > 0 && intersects[0].distance < collisionDistance;
+const renderScene = new RenderPass(scene, camera);
+const bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
+composer = new EffectComposer(renderer);
+composer.addPass(renderScene);
+composer.addPass(bloom);
+
+const draco = new DRACOLoader();
+draco.setDecoderPath('./draco/');
+const loader = new GLTFLoader();
+loader.setDRACOLoader(draco);
+
+loader.load('model.glb', (gltf) => {
+  document.getElementById('loading').style.display = 'none';
+  const model = gltf.scene;
+  model.traverse(child => {
+    if (child.name === 'Animated') animatedObject = child;
+    if (child.isMesh && child.material) {
+      child.castShadow = true;
+      child.receiveShadow = true;
+      child.material.roughness = 0.4;
+      child.material.metalness = 0.5;
+      child.material.envMapIntensity = 0.9;
+      modelMaterialList.push(child.material);
+    }
+  });
+  scene.add(model);
+
+  if (gltf.animations.length > 0) {
+    mixer = new THREE.AnimationMixer(model);
+    animationAction = mixer.clipAction(gltf.animations[0]);
+    animationAction.clampWhenFinished = true;
+    animationAction.loop = THREE.LoopOnce;
+  }
+});
+
+document.getElementById('playAnimation').addEventListener('click', () => {
+  if (animationAction) animationAction.reset().play();
+});
+
+document.getElementById('resolutionSelect').addEventListener('change', (e) => {
+  const value = parseFloat(e.target.value);
+  renderer.setPixelRatio(value);
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  composer.setSize(window.innerWidth, window.innerHeight);
+});
+
+document.getElementById('hdriSlider').oninput = (e) => {
+  const intensity = parseFloat(e.target.value);
+  modelMaterialList.forEach(mat => {
+    mat.envMapIntensity = intensity;
+    mat.needsUpdate = true;
+    setHDRIntensity(1.5);
+  });
+};
+
+function updateMaterialUI() {
+  const rough = parseFloat(document.getElementById('roughnessSlider').value);
+  const metal = parseFloat(document.getElementById('metalnessSlider').value);
+  const env = parseFloat(document.getElementById('envSlider').value);
+  modelMaterialList.forEach(mat => {
+    mat.roughness = rough;
+    mat.metalness = metal;
+    mat.envMapIntensity = env;
+  });
+}
+['roughnessSlider', 'metalnessSlider', 'envSlider'].forEach(id =>
+  document.getElementById(id).oninput = updateMaterialUI
+);
+
+function detectCollision(newPos) {
+  raycaster.set(newPos, moveDirection.clone().normalize());
+  const intersects = raycaster.intersectObjects(scene.children, true);
+  return intersects.length > 0 && intersects[0].distance < 0.5;
 }
 
-function handleCameraMovement() {
+function handleCameraMovement(delta) {
   moveDirection.set(0, 0, 0);
-
-  // Set movement direction based on user input
   if (move.forward) moveDirection.z -= 1;
   if (move.backward) moveDirection.z += 1;
   if (move.left) moveDirection.x -= 1;
   if (move.right) moveDirection.x += 1;
-
   moveDirection.normalize();
 
-  const speed = 3;
-  const moveDelta = direction.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw).multiplyScalar(speed * clock.getDelta());
+  const moveSpeed = 3;
+  const moveDelta = moveDirection.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw).multiplyScalar(moveSpeed * delta);
+  const newPosition = camera.position.clone().add(moveDelta);
 
-  // Before moving, check for collisions
-  const newCameraPosition = camera.position.clone().add(moveDelta);
-  raycaster.ray.origin.copy(newPos); // Start raycasting from the new position
-
-  camera.position.copy(newCameraPosition);
-
-  if (detectCollision()) {
-    camera.position.copy(camera.position); // Keep the camera at the previous position if collision detected
-  } else {
-    // If no collision, actually move the camera
-    camera.position.copy(newCameraPosition);
+  if (!detectCollision(newPosition)) {
+    camera.position.copy(newPosition);
   }
 }
 
-// Handle input for camera movement
+function animate() {
+  requestAnimationFrame(animate);
+  const delta = clock.getDelta();
+
+  handleCameraMovement(delta);
+
+  camera.rotation.order = 'YXZ';
+  camera.rotation.y = yaw;
+  camera.rotation.x = pitch;
+
+  if (mixer) mixer.update(delta);
+  composer.render();
+}
+
+animate();
+
 window.addEventListener('keydown', (e) => {
   if (e.key === 'w') move.forward = true;
   if (e.key === 's') move.backward = true;
   if (e.key === 'a') move.left = true;
   if (e.key === 'd') move.right = true;
 });
-
 window.addEventListener('keyup', (e) => {
   if (e.key === 'w') move.forward = false;
   if (e.key === 's') move.backward = false;
@@ -367,78 +259,55 @@ window.addEventListener('keyup', (e) => {
   if (e.key === 'd') move.right = false;
 });
 
-    
-    function updateMovement() {
-      direction.set(0, 0, 0);
-      if (move.forward) direction.z -= 1;
-      if (move.backward) direction.z += 1;
-      if (move.left) direction.x -= 1;
-      if (move.right) direction.x += 1;
-    
-      direction.normalize();
-    
-      const speed = 3;
-      const moveDelta = direction.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw).multiplyScalar(speed * clock.getDelta());
-    
-      // Before moving, check for collisions
-      const newPos = camera.position.clone().add(moveDelta);
-      raycaster.ray.origin.copy(newPos); // Start raycasting from the new position
-      if (!detectCollision()) {
-        camera.position.copy(newPos); // Move camera only if no collision detected
-      }
-    }
-    
-    // Handle input for camera movement
-    window.addEventListener('keydown', (e) => {
-      if (e.key === 'w') move.forward = true;
-      if (e.key === 's') move.backward = true;
-      if (e.key === 'a') move.left = true;
-      if (e.key === 'd') move.right = true;
-    });
-    
-    window.addEventListener('keyup', (e) => {
-      if (e.key === 'w') move.forward = false;
-      if (e.key === 's') move.backward = false;
-      if (e.key === 'a') move.left = false;
-      if (e.key === 'd') move.right = false;
-    });
-    
-  
-    
+document.body.addEventListener('mousemove', (e) => {
+  if (e.buttons !== 1) return;
+  yaw -= e.movementX * 0.002;
+  pitch -= e.movementY * 0.002;
+  pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, pitch));
+});
 
-    function animate() {
-      requestAnimationFrame(animate);
-      const delta = clock.getDelta();
-      if (mixer) mixer.update(delta);
-    
-      // Movement and camera updates
-      direction.set(0, 0, 0);
-      if (move.forward) direction.z -= 1;
-      if (move.backward) direction.z += 1;
-      if (move.left) direction.x -= 1;
-      if (move.right) direction.x += 1;
-      direction.normalize();
-    
-      const speed = 3;
-      const moveDelta = direction.clone().applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw).multiplyScalar(speed * delta);
-      camera.position.add(moveDelta);
-    
-      camera.rotation.order = 'YXZ';
-      camera.rotation.y = yaw;
-      camera.rotation.x = pitch;
-    
-      // Update all objects' world matrices
-      scene.traverse(child => {
-        if (child instanceof THREE.Mesh) {
-          child.updateMatrixWorld();
-        }
-      });
-    
-      // Render the scene using the renderer
-      renderer.render(scene, camera);
-    }
+let lastTouch = null;
+document.body.addEventListener('touchmove', (e) => {
+  if (!lastTouch) {
+    lastTouch = e.touches[0];
+    return;
+  }
+  const dx = e.touches[0].clientX - lastTouch.clientX;
+  const dy = e.touches[0].clientY - lastTouch.clientY;
+  yaw -= dx * 0.002;
+  pitch -= dy * 0.002;
+  pitch = Math.max(-Math.PI/2, Math.min(Math.PI/2, pitch));
+  lastTouch = e.touches[0];
+});
+document.body.addEventListener('touchend', () => {
+  lastTouch = null;
+});
 
-    animate();
-  </script>
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  composer.setSize(window.innerWidth, window.innerHeight);
+});
+
+if (/Mobi|Android|iPhone/i.test(navigator.userAgent)) {
+  const joystick = nipplejs.create({
+    zone: document.getElementById('joystick-container'),
+    mode: 'static',
+    position: { left: '60px', bottom: '60px' },
+    color: 'blue'
+  });
+  joystick.on('move', (evt, data) => {
+    if (!data.direction) return;
+    move.forward = data.direction.y === 'up';
+    move.backward = data.direction.y === 'down';
+    move.left = data.direction.x === 'left';
+    move.right = data.direction.x === 'right';
+  });
+  joystick.on('end', () => {
+    move.forward = move.backward = move.left = move.right = false;
+  });
+}
+</script>
 </body>
 </html>
